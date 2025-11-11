@@ -20,13 +20,20 @@ export async function startTunnel(localPort, tunnelServer, clientId) {
         method,
         headers,
       });
-      const body = await response.text();
+
+      const body = await response.buffer();
+
+      const responseHeaders = Object.fromEntries(response.headers.entries());
+      delete responseHeaders["content-encoding"];
+      delete responseHeaders["transfer-encoding"];
+
+      responseHeaders["content-length"] = body.length.toString();
 
       ws.send(
         JSON.stringify({
           status: response.status,
-          headers: Object.fromEntries(response.headers.entries()),
-          body,
+          headers: responseHeaders,
+          body: body.toString("base64"),
         })
       );
     } catch (err) {
@@ -34,7 +41,9 @@ export async function startTunnel(localPort, tunnelServer, clientId) {
         JSON.stringify({
           status: 502,
           headers: { "content-type": "text/plain" },
-          body: "Bad Gateway: local server unreachable",
+          body: Buffer.from("Bad Gateway: local server unreachable").toString(
+            "base64"
+          ),
         })
       );
     }

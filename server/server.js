@@ -48,8 +48,11 @@ app.use("/:id", (req, res) => {
   client.once("message", (msg) => {
     try {
       const { status, headers, body } = JSON.parse(msg.toString());
+
+      const bodyBuffer = Buffer.from(body, "base64");
+
       res.writeHead(status, headers);
-      res.end(body);
+      res.end(bodyBuffer);
     } catch (e) {
       console.error("Error parsing message from client:", e);
       res.status(500).send("Error processing client response.");
