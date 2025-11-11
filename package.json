@@ -1,0 +1,13 @@
+{
+  "name": "portpass-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "install": "cd server && npm install",
+    "build": "cd server && npm run build",
+    "start": "cd server && npm start"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
