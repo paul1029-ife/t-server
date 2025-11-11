@@ -1,6 +1,6 @@
 {
   "name": "portpass",
-  "version": "1.0.1",
+  "version": "1.0.4",
   "description": "Expose your local server to the internet instantly.",
   "type": "module",
   "bin": {

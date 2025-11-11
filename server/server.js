@@ -37,9 +37,16 @@ app.use("/:id", (req, res) => {
     return res.status(404).send("Tunnel not active");
   }
 
+  console.log(
+    `📥 ${req.method} ${req.path}${
+      req.url.includes("?") ? req.url.substring(req.url.indexOf("?")) : ""
+    }`
+  );
+
   const payload = {
     method: req.method,
     path: req.path,
+    query: req.query,
     headers: req.headers,
   };
 
@@ -50,6 +57,8 @@ app.use("/:id", (req, res) => {
       const { status, headers, body } = JSON.parse(msg.toString());
 
       const bodyBuffer = Buffer.from(body, "base64");
+
+      console.log(`📤 Response: ${status} (${bodyBuffer.length} bytes)`);
 
       res.writeHead(status, headers);
       res.end(bodyBuffer);

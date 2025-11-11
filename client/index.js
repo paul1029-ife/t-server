@@ -13,10 +13,19 @@ export async function startTunnel(localPort, tunnelServer, clientId) {
   });
 
   ws.on("message", async (data) => {
-    const { method, path, headers } = JSON.parse(data);
+    const { method, path, query, headers } = JSON.parse(data);
 
     try {
-      const response = await fetch(`http://localhost:${localPort}${path}`, {
+      const queryString =
+        query && Object.keys(query).length > 0
+          ? "?" + new URLSearchParams(query).toString()
+          : "";
+
+      const fullUrl = `http://localhost:${localPort}${path}${queryString}`;
+
+      console.log(`🔄 Fetching: ${fullUrl}`);
+
+      const response = await fetch(fullUrl, {
         method,
         headers,
       });
@@ -26,7 +35,6 @@ export async function startTunnel(localPort, tunnelServer, clientId) {
       const responseHeaders = Object.fromEntries(response.headers.entries());
       delete responseHeaders["content-encoding"];
       delete responseHeaders["transfer-encoding"];
-
       responseHeaders["content-length"] = body.length.toString();
 
       ws.send(
@@ -37,6 +45,7 @@ export async function startTunnel(localPort, tunnelServer, clientId) {
         })
       );
     } catch (err) {
+      console.error(`❌ Fetch error: ${err.message}`);
       ws.send(
         JSON.stringify({
           status: 502,
