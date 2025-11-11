@@ -14,6 +14,13 @@ wss.on("connection", (ws, req) => {
     req.url,
     `http://${req.headers.host}`
   ).searchParams.get("id");
+
+  if (!clientId) {
+    console.warn("Client connection rejected: No ID provided in query.");
+    ws.close();
+    return;
+  }
+
   clients.set(clientId, ws);
   console.log(`🔌 Client connected: ${clientId}`);
 
@@ -23,26 +30,38 @@ wss.on("connection", (ws, req) => {
   });
 });
 
-app.all("/:id/*", (req, res) => {
+app.use("/:id", (req, res) => {
   const client = clients.get(req.params.id);
-  if (!client) return res.status(404).send("Tunnel not active");
+  if (!client) {
+    console.log(`Request for unknown ID: ${req.params.id}`);
+    return res.status(404).send("Tunnel not active");
+  }
 
   const payload = {
     method: req.method,
-    path: req.params[0],
+    path: req.path.substring(1),
     headers: req.headers,
   };
 
   client.send(JSON.stringify(payload));
 
   client.once("message", (msg) => {
-    const { status, headers, body } = JSON.parse(msg);
-    res.writeHead(status, headers);
-    res.end(body);
+    try {
+      const { status, headers, body } = JSON.parse(msg.toString());
+      res.writeHead(status, headers);
+      res.end(body);
+    } catch (e) {
+      console.error("Error parsing message from client:", e);
+      res.status(500).send("Error processing client response.");
+    }
   });
 });
 
-const PORT = process.env.PORT || 3000;
+app.get("/", (req, res) => {
+  res.send(`Tunnel server is active. ${clients.size} client(s) connected.`);
+});
+
+const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
   console.log(`🚀 Tunnel server running on port ${PORT}`);
 });
