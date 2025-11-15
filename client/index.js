@@ -13,7 +13,7 @@ export async function startTunnel(localPort, tunnelServer, clientId) {
   });
 
   ws.on("message", async (data) => {
-    const { method, path, query, headers } = JSON.parse(data);
+    const { method, path, query, headers, requestId } = JSON.parse(data);
 
     try {
       const queryString =
@@ -23,38 +23,54 @@ export async function startTunnel(localPort, tunnelServer, clientId) {
 
       const fullUrl = `http://localhost:${localPort}${path}${queryString}`;
 
-      console.log(`🔄 Fetching: ${fullUrl}`);
+      console.log(`🔄 [${requestId}] Fetching: ${fullUrl}`);
 
       const response = await fetch(fullUrl, {
         method,
         headers,
       });
 
-      const body = await response.buffer();
+      const bodyBuffer = await response.buffer();
 
       const responseHeaders = Object.fromEntries(response.headers.entries());
       delete responseHeaders["content-encoding"];
       delete responseHeaders["transfer-encoding"];
-      responseHeaders["content-length"] = body.length.toString();
+      responseHeaders["content-length"] = bodyBuffer.length.toString();
 
-      ws.send(
-        JSON.stringify({
-          status: response.status,
-          headers: responseHeaders,
-          body: body.toString("base64"),
-        })
-      );
+      const meta = JSON.stringify({
+        status: response.status,
+        headers: responseHeaders,
+        requestId,
+      });
+      const metaBuffer = Buffer.from(meta, "utf8");
+
+      const lengthBuffer = Buffer.alloc(4);
+      lengthBuffer.writeUInt32BE(metaBuffer.length);
+
+      const fullMessage = Buffer.concat([lengthBuffer, metaBuffer, bodyBuffer]);
+
+      ws.send(fullMessage);
     } catch (err) {
-      console.error(`❌ Fetch error: ${err.message}`);
-      ws.send(
-        JSON.stringify({
-          status: 502,
-          headers: { "content-type": "text/plain" },
-          body: Buffer.from("Bad Gateway: local server unreachable").toString(
-            "base64"
-          ),
-        })
-      );
+      console.error(`❌ [${requestId}] Fetch error: ${err.message}`);
+
+      const errorBody = Buffer.from("Bad Gateway: local server unreachable");
+      const errorMeta = JSON.stringify({
+        status: 502,
+        headers: {
+          "content-type": "text/plain",
+          "content-length": errorBody.length.toString(),
+        },
+        requestId,
+      });
+      const errorMetaBuffer = Buffer.from(errorMeta, "utf8");
+      const lengthBuffer = Buffer.alloc(4);
+      lengthBuffer.writeUInt32BE(errorMetaBuffer.length);
+      const errorMessage = Buffer.concat([
+        lengthBuffer,
+        errorMetaBuffer,
+        errorBody,
+      ]);
+      ws.send(errorMessage);
     }
   });
 
