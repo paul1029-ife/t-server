@@ -8,6 +8,13 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true });
 const clients = new Map();
 
+function createBinaryMessage(meta, body = Buffer.alloc(0)) {
+  const metaBuffer = Buffer.from(JSON.stringify(meta), "utf8");
+  const lengthBuffer = Buffer.alloc(4);
+  lengthBuffer.writeUInt32BE(metaBuffer.length);
+  return Buffer.concat([lengthBuffer, metaBuffer, body]);
+}
+
 wss.on("connection", (ws, req, clientId) => {
   console.log(`🔌 Client connected: ${clientId}`);
 
@@ -19,6 +26,7 @@ wss.on("connection", (ws, req, clientId) => {
   clients.set(clientId, clientData);
 
   ws.on("message", (msg) => {
+    console.log(`[SERVER] Received message from client (${msg.length} bytes).`);
     try {
       const metaLength = msg.readUInt32BE(0);
       const metaJSON = msg.subarray(4, 4 + metaLength).toString("utf8");
@@ -28,7 +36,17 @@ wss.on("connection", (ws, req, clientId) => {
       switch (meta.type) {
         case "HTTP_RESPONSE": {
           const { status, headers, requestId } = meta;
+          console.log(
+            `[${requestId}] HTTP_RESPONSE received. Looking for pending request.`
+          );
           const res = clientData.pendingHttpRequests.get(requestId);
+          if (!res) {
+            console.warn(
+              `[${requestId}] HTTP_RESPONSE received, but NO pending request found!`
+            );
+            return;
+          }
+
           if (!res) return;
 
           console.log(
@@ -60,7 +78,7 @@ wss.on("connection", (ws, req, clientId) => {
         }
       }
     } catch (e) {
-      console.error("Error parsing binary message from client:", e);
+      console.error("[SERVER] Error parsing message from client:", e);
     }
   });
 
@@ -96,7 +114,7 @@ app.use("/:id", (req, res) => {
   };
 
   clientData.pendingHttpRequests.set(requestId, res);
-  clientData.ws.send(JSON.stringify(payload));
+  clientData.ws.send(createBinaryMessage(payload));
 });
 
 server.on("upgrade", (req, socket, head) => {
@@ -131,7 +149,7 @@ server.on("upgrade", (req, socket, head) => {
   );
 
   clientData.ws.send(
-    JSON.stringify({
+    createBinaryMessage({
       type: "WS_OPEN",
       requestId: wsRequestId,
       path: url.pathname.replace(`/${clientIdFromPath}`, "") + url.search,
@@ -157,7 +175,7 @@ server.on("upgrade", (req, socket, head) => {
     browserWs.on("close", () => {
       clientData.pendingWebSockets.delete(wsRequestId);
       clientData.ws.send(
-        JSON.stringify({
+        createBinaryMessage({
           type: "WS_CLOSE",
           requestId: wsRequestId,
         })
